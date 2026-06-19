@@ -1,0 +1,53 @@
+@baseUrl = http://localhost/lms_project/lms-backend/api/issues.php
+@auth = http://localhost/lms_project/lms-backend/api/auth.php
+
+### ล็อกอิน member
+# @name login
+POST {{auth}}?action=login
+Content-Type: application/json
+
+{ "email": "test@test.com", "password": "1234" }
+
+### ล็อกอิน admin
+# @name loginAdmin
+POST {{auth}}?action=login
+Content-Type: application/json
+
+{ "email": "admin@test.com", "password": "1234" }
+
+### 1) จองหนังสือ id=1 (member)
+POST {{baseUrl}}?action=reserve
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{ "book_id": 1 }
+
+### 2) admin ดูรายการจองที่รออนุมัติ
+GET {{baseUrl}}?action=reservations
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+### 3) admin อนุมัติรับของ (แก้ id ให้ตรงกับข้อ 2)
+POST {{baseUrl}}?action=approve
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+{ "id": 1 }
+
+### 4) member ดูหนังสือที่กำลังเช่า (ไว้เลือกคืน)
+GET {{baseUrl}}?action=my_current
+Authorization: Bearer {{login.response.body.token}}
+
+### 5) member คืนหนังสือ (แก้ issue_id ให้ตรงกับข้อ 4)
+POST {{baseUrl}}?action=return
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{ "issue_id": 1 }
+
+### 6) member ดูประวัติของตัวเอง
+GET {{baseUrl}}?action=history
+Authorization: Bearer {{login.response.body.token}}
+
+### 7) admin ดูรายงานสรุป + ยอดค่าปรับรวม
+GET {{baseUrl}}?action=report
+Authorization: Bearer {{loginAdmin.response.body.token}}

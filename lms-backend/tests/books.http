@@ -1,0 +1,42 @@
+@baseUrl = http://localhost/lms_project/lms-backend/api/books.php
+@auth = http://localhost/lms_project/lms-backend/api/auth.php
+
+### ล็อกอิน admin ก่อน (เก็บ token)
+# @name loginAdmin
+POST {{auth}}?action=login
+Content-Type: application/json
+
+{ "email": "admin@test.com", "password": "1234" }
+
+### 1) ดูหนังสือทั้งหมด (สาธารณะ)
+GET {{baseUrl}}?action=list
+
+### 2) ค้นหาหนังสือ
+GET {{baseUrl}}?action=list&q=clean
+
+### 3) หนังสือยอดนิยม
+GET {{baseUrl}}?action=popular
+
+### 4) เพิ่มหนังสือ (ต้องเป็น admin)
+POST {{baseUrl}}?action=create
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+{ "title": "หนังสือใหม่", "author": "ผู้แต่ง", "category": "ทั่วไป", "price": 199, "copies": 4 }
+
+### 5) เพิ่มหนังสือโดยไม่มี token (คาดหวัง 401)
+POST {{baseUrl}}?action=create
+Content-Type: application/json
+
+{ "title": "ไม่มีสิทธิ์" }
+
+### 6) แก้ไขหนังสือ id=1 (admin)
+POST {{baseUrl}}?action=update
+Content-Type: application/json
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+{ "id": 1, "title": "แฮร์รี่ พอตเตอร์ เล่ม 1 (แก้ไข)", "author": "J.K. Rowling", "category": "แฟนตาซี", "price": 360, "copies": 3 }
+
+### 7) ลบหนังสือ id=4 (admin)
+GET {{baseUrl}}?action=delete&id=4
+Authorization: Bearer {{loginAdmin.response.body.token}}

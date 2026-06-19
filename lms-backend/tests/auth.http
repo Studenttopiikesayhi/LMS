@@ -1,0 +1,31 @@
+@baseUrl = http://localhost/lms_project/lms-backend/api/auth.php
+
+### 1) สมัครสมาชิก (201)
+POST {{baseUrl}}?action=register
+Content-Type: application/json
+
+{ "name": "ทดสอบ ระบบ", "email": "test@test.com", "password": "1234" }
+
+### 2) สมัครอีเมลซ้ำ (409)
+POST {{baseUrl}}?action=register
+Content-Type: application/json
+
+{ "name": "ซ้ำ", "email": "test@test.com", "password": "1234" }
+
+### 3) เข้าสู่ระบบ member (200 + token)
+# @name login
+POST {{baseUrl}}?action=login
+Content-Type: application/json
+
+{ "email": "test@test.com", "password": "1234" }
+
+### 4) เข้าสู่ระบบ admin (200 + token)
+# @name loginAdmin
+POST {{baseUrl}}?action=login
+Content-Type: application/json
+
+{ "email": "admin@test.com", "password": "1234" }
+
+### 5) ตรวจ token ปัจจุบัน
+GET {{baseUrl}}?action=me
+Authorization: Bearer {{login.response.body.token}}

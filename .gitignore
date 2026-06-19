@@ -1,0 +1,14 @@
+# ===== macOS =====
+.DS_Store
+
+# ===== PhpStorm / IDE =====
+.idea/
+*.iml
+
+# ===== ความลับ / ค่าตั้งเฉพาะเครื่อง =====
+.env
+**/config/secret.php
+
+# ===== Log / ชั่วคราว =====
+*.log
+/tmp/

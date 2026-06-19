@@ -1,0 +1,5 @@
+body { background-color: #f8f9fa; }
+.navbar-brand { font-weight: 500; }
+.action-card { transition: transform .15s ease; cursor: pointer; }
+.action-card:hover { transform: translateY(-4px); }
+.table-responsive { border-radius: .5rem; overflow: hidden; }
