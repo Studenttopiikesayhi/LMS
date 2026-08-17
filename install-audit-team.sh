@@ -1,10 +1,42 @@
 #!/usr/bin/env bash
 # install-audit-team.sh — ติดตั้งทีม Engineering LMS (7 subagent: orchestrator + 4 audit + dev + tester)
 # วิธีใช้: วางไฟล์นี้ที่ root ของ lms_project แล้วรันในแท็บ Local:  bash install-audit-team.sh
+#
+# ความปลอดภัย (ปรับปรุง 2026-08-18):
+#   - ไม่เขียนทับ README.md ของโปรเจกต์อีกต่อไป (คู่มือทีมไปอยู่ docs/AGENTS-SETUP.md)
+#   - สำรองไฟล์ agent เดิมไว้ใน .agent-backup-<timestamp>/ ก่อนเขียนทับทุกครั้ง
+#   - ตรวจว่ารันจาก root ของโปรเจกต์จริงก่อนทำงาน
+#   - ไม่แตะโค้ดใน lms-backend/ lms-frontend/ และไม่แตะฐานข้อมูล
 set -euo pipefail
 
+# ── ตรวจว่ารันจาก root ของโปรเจกต์ LMS จริง (กันเผลอรันผิดที่แล้วสร้างไฟล์กระจัดกระจาย) ──
+if [ ! -d "lms-backend" ] && [ ! -d "lms-frontend" ]; then
+  echo "❌ ไม่พบโฟลเดอร์ lms-backend/ หรือ lms-frontend/ ในไดเรกทอรีปัจจุบัน"
+  echo "   สคริปต์นี้ต้องรันจาก root ของโปรเจกต์ LMS เท่านั้น"
+  echo "   ไดเรกทอรีปัจจุบัน: $(pwd)"
+  exit 1
+fi
+
+
 echo "→ กำลังติดตั้ง/อัปเดตทีม Engineering LMS (7 subagent) ..."
-mkdir -p .claude/agents
+mkdir -p .claude/agents docs
+
+# ── สำรองไฟล์เดิมก่อนเขียนทับ (กันงานหายถ้ารันซ้ำ) ──
+BACKUP_DIR=".agent-backup-$(date +%Y%m%d-%H%M%S)"
+_backed_up=0
+for f in AGENTS.md CLAUDE.md docs/AGENTS-SETUP.md .claude/agents/lms-*.md; do
+  if [ -f "$f" ]; then
+    mkdir -p "$BACKUP_DIR/$(dirname "$f")"
+    cp "$f" "$BACKUP_DIR/$f"
+    _backed_up=1
+  fi
+done
+if [ "$_backed_up" = "1" ]; then
+  echo "   ↩︎ สำรองไฟล์เดิมไว้ที่: $BACKUP_DIR/"
+else
+  rmdir "$BACKUP_DIR" 2>/dev/null || true
+fi
+
 
 # ---------- AGENTS.md ----------
 cat > 'AGENTS.md' << 'LMSAGENT_EOF_01'
@@ -163,8 +195,10 @@ Claude Code อ่านไฟล์นี้อัตโนมัติเม�
 > **สิทธิ์:** 4 ตัวแรกแก้ไฟล์ไม่ได้จริง (โดยตั้งใจ). `lms-dev` แก้โค้ดได้. `lms-tester` เขียนได้เฉพาะ test file (เป็นวินัยระดับ prompt — tooling ไม่ได้ล็อกให้เขียนเฉพาะ test).
 LMSAGENT_EOF_02
 
-# ---------- README.md ----------
-cat > 'README.md' << 'LMSAGENT_EOF_03'
+# ---------- docs/AGENTS-SETUP.md ----------
+# หมายเหตุ: เดิมสคริปต์นี้เขียนทับ README.md ของโปรเจกต์
+# เปลี่ยนปลายทางเป็น docs/AGENTS-SETUP.md เพื่อไม่ให้ทับ README ของระบบ LMS
+cat > 'docs/AGENTS-SETUP.md' << 'LMSAGENT_EOF_03'
 # ทีม Engineering สำหรับ LMS Capstone — วิธีติดตั้งใน Claude Code
 
 ชุดนี้ทำให้ Claude Code มี **subagent 6 ตัว**: **4 ตัว audit ที่แก้ไฟล์ไม่ได้จริง** (locator, reviewer, security, architecture) + **2 ตัวเขียนได้** (dev แก้โค้ด, tester เขียน/รันเทสต์) — ครบวงจร **audit → fix → test → re-review** สำหรับโปรเจกต์ LMS (PHP REST API + JS).
@@ -600,7 +634,7 @@ LMSAGENT_EOF_10
 
 echo ""
 echo "✅ สร้าง/อัปเดตไฟล์ครบแล้ว:"
-ls -1 AGENTS.md CLAUDE.md README.md .claude/agents/*.md
+ls -1 AGENTS.md CLAUDE.md docs/AGENTS-SETUP.md .claude/agents/*.md
 echo ""
 echo "→ ตรวจสิทธิ์ (tools:) ทุก subagent:"
 for f in .claude/agents/*.md; do
@@ -613,5 +647,7 @@ for f in .claude/agents/*.md; do
     echo "   🔒 $(basename "$f" .md) : [$tools]  (read-only)"
   fi
 done
+echo ""
+echo "ℹ️  README.md ของโปรเจกต์ไม่ถูกแตะ — คู่มือทีม agent อยู่ที่ docs/AGENTS-SETUP.md"
 echo ""
 echo "เสร็จ — ในแท็บ Claude Code ลองสั่ง: ใช้ lms-orchestrator ทำครบวงจรบน lms-backend/api/issues.php (audit→fix→test→review). ถ้าไม่เห็น subagent ให้ปิด-เปิดแท็บใหม่"

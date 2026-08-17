@@ -11,4 +11,4 @@
 
 # ===== Log / ชั่วคราว =====
 *.log
-/tmp/
+/tmp/.agent-backup-*/
