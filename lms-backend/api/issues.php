@@ -29,8 +29,8 @@ function issues_reserve(): void {
         $stmt = $pdo->prepare("SELECT copies, price FROM books WHERE id = ? FOR UPDATE");
         $stmt->execute([$book_id]);
         $book = $stmt->fetch();
-        if (!$book) throw new RuntimeException('ไม่พบข้อมูลหนังสือ');
-        if ((int)$book['copies'] <= 0) throw new RuntimeException('ขออภัย หนังสือหมดแล้ว');
+        if (!$book) throw new BusinessException('ไม่พบข้อมูลหนังสือ');
+        if ((int)$book['copies'] <= 0) throw new BusinessException('ขออภัย หนังสือหมดแล้ว');
 
         $pdo->prepare("UPDATE books SET copies = copies - 1 WHERE id = ?")->execute([$book_id]);
         $issue_date = date('Y-m-d');
@@ -41,9 +41,13 @@ function issues_reserve(): void {
 
         $fee = round((float)$book['price'] * 0.10, 2);
         json_response(['success'=>true,'message'=>"จองสำเร็จ (ค่าเช่า $fee บาท ชำระที่เคาน์เตอร์)",'rental_fee'=>$fee],201);
+    } catch (BusinessException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        json_response(['success'=>false,'message'=>$e->getMessage()], 400);
     } catch (Throwable $e) {
-        $pdo->rollBack();
-        json_response(['success'=>false,'message'=>$e->getMessage()],400);
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log($e);
+        json_response(['success'=>false,'message'=>'ทำรายการไม่สำเร็จ'], 500);
     }
 }
 
@@ -60,8 +64,8 @@ function issues_return(): void {
         $stmt = $pdo->prepare("SELECT * FROM issues WHERE id = ? AND user_id = ? FOR UPDATE");
         $stmt->execute([$issue_id, (int)$user['sub']]);
         $issue = $stmt->fetch();
-        if (!$issue) throw new RuntimeException('ไม่พบรายการนี้');
-        if ($issue['status'] !== 'active') throw new RuntimeException('รายการนี้ยังไม่อยู่ในสถานะกำลังเช่า');
+        if (!$issue) throw new BusinessException('ไม่พบรายการนี้');
+        if ($issue['status'] !== 'active') throw new BusinessException('รายการนี้ยังไม่อยู่ในสถานะกำลังเช่า');
 
         $return_date = date('Y-m-d');
         $days = (int)ceil((strtotime($return_date) - strtotime($issue['due_date'])) / 86400);
@@ -73,9 +77,13 @@ function issues_return(): void {
         $pdo->commit();
 
         json_response(['success'=>true,'message'=>"คืนสำเร็จ ค่าปรับ $fine บาท",'fine'=>$fine]);
+    } catch (BusinessException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        json_response(['success'=>false,'message'=>$e->getMessage()], 400);
     } catch (Throwable $e) {
-        $pdo->rollBack();
-        json_response(['success'=>false,'message'=>$e->getMessage()],400);
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log($e);
+        json_response(['success'=>false,'message'=>'ทำรายการไม่สำเร็จ'], 500);
     }
 }
 
@@ -118,11 +126,18 @@ function issues_approve(): void {
     require_admin();
     $id = (int)(get_json_body()['id'] ?? 0);
     if ($id <= 0) json_response(['success'=>false,'message'=>'ไม่พบรายการ'],400);
-    $now = date('Y-m-d'); $due = date('Y-m-d', strtotime('+7 days'));
-    $stmt = db()->prepare("UPDATE issues SET status='active', issue_date=?, due_date=? WHERE id=? AND status='reserved'");
-    $stmt->execute([$now, $due, $id]);
-    if ($stmt->rowCount() === 0) json_response(['success'=>false,'message'=>'ไม่พบรายการจองที่รออนุมัติ'],404);
-    json_response(['success'=>true,'message'=>'อนุมัติรับหนังสือเรียบร้อย (เริ่มนับวันเช่าวันนี้)']);
+    try {
+        $now = date('Y-m-d'); $due = date('Y-m-d', strtotime('+7 days'));
+        $stmt = db()->prepare("UPDATE issues SET status='active', issue_date=?, due_date=? WHERE id=? AND status='reserved'");
+        $stmt->execute([$now, $due, $id]);
+        if ($stmt->rowCount() === 0) json_response(['success'=>false,'message'=>'ไม่พบรายการจองที่รออนุมัติ'],404);
+        json_response(['success'=>true,'message'=>'อนุมัติรับหนังสือเรียบร้อย (เริ่มนับวันเช่าวันนี้)']);
+    } catch (BusinessException $e) {
+        json_response(['success'=>false,'message'=>$e->getMessage()], 400);
+    } catch (Throwable $e) {
+        error_log($e);
+        json_response(['success'=>false,'message'=>'ทำรายการไม่สำเร็จ'], 500);
+    }
 }
 
 // ยกเลิกการจอง (admin) → คืนสต็อก

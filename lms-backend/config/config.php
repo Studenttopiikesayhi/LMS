@@ -43,6 +43,9 @@ function db(): PDO {
     return $pdo;
 }
 
+// ---------- ข้อผิดพลาดเชิงธุรกิจ (ข้อความปลอดภัยส่งให้ client ได้) ----------
+class BusinessException extends Exception {}
+
 // ---------- ตอบกลับ JSON แล้วจบการทำงาน ----------
 function json_response(array $data, int $status = 200): void {
     http_response_code($status);
