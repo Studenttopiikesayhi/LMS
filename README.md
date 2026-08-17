@@ -1,92 +1,299 @@
-# ทีม Engineering สำหรับ LMS Capstone — วิธีติดตั้งใน Claude Code
+# ระบบบริหารจัดการร้านเช่าหนังสือ (Rental Management System — LMS)
 
-ชุดนี้ทำให้ Claude Code มี **subagent 6 ตัว**: **4 ตัว audit ที่แก้ไฟล์ไม่ได้จริง** (locator, reviewer, security, architecture) + **2 ตัวเขียนได้** (dev แก้โค้ด, tester เขียน/รันเทสต์) — ครบวงจร **audit → fix → test → re-review** สำหรับโปรเจกต์ LMS (PHP REST API + JS).
+ระบบเว็บแอปพลิเคชันสำหรับร้านเช่าหนังสือ รองรับการค้นหาและจองหนังสือออนไลน์ การรับหนังสือที่ร้าน
+การคืนพร้อมคำนวณค่าปรับอัตโนมัติ และรายงานสรุปสำหรับผู้ดูแลระบบ
 
-## ไฟล์ในชุดนี้
+พัฒนาเป็นโครงงานวิศวกรรมซอฟต์แวร์ ตามมาตรฐานอ้างอิง **ISO/IEC 29110 (VSE Profile)**
+
+| หัวข้อ | รายละเอียด |
+|---|---|
+| ผู้จัดทำ | นายพันธุ์ธัช รินทร์แก้ว (Punthut Rinkaew) รหัส 671103010 |
+| อาจารย์ที่ปรึกษา | อาจารย์ดนุพล วันชัยสถิร (Danuphon Wunchaisatira) |
+| หลักสูตร | สาขาวิศวกรรมซอฟต์แวร์ มหาวิทยาลัยนอร์ท-เชียงใหม่ |
+| สถานะ | อยู่ระหว่างพัฒนา — ระบบใช้งานได้ครบทุกฟังก์ชันหลัก |
+
+---
+
+## ฟังก์ชันหลัก
+
+| รหัส | ฟังก์ชัน | ผู้ใช้ |
+|---|---|---|
+| F-1 | สมัครสมาชิก | บุคคลทั่วไป |
+| F-2 | เข้าสู่ระบบ / ออกจากระบบ | สมาชิก, ผู้ดูแล |
+| F-3 | ค้นหาหนังสือ (ชื่อ / ผู้แต่ง / หมวดหมู่) พร้อมรูปหน้าปก | ทุกบทบาท |
+| F-4 | จองหนังสือ — ตัดสต็อก คำนวณค่าเช่า และบันทึกหมายเหตุ | สมาชิก |
+| F-5 | คืนหนังสือและคำนวณค่าปรับ | สมาชิก |
+| F-6 | ดูประวัติการเช่าของตนเอง | สมาชิก |
+| F-7 | แสดงหนังสือยอดนิยมจากสถิติการยืม | ทุกบทบาท |
+| F-8 | จัดการข้อมูลหนังสือ รวมถึง URL รูปหน้าปก | ผู้ดูแล |
+| F-9 | จัดการสมาชิกและสิทธิ์ | ผู้ดูแล |
+| F-10 | อนุมัติการรับหนังสือ / ยกเลิกการจองและคืนสต็อก | ผู้ดูแล |
+| F-11 | รายงานสรุปการเช่า-คืน ยอดค่าปรับรวม พร้อมแดชบอร์ดสถิติภาพรวม | ผู้ดูแล |
+
+---
+
+## กฎทางธุรกิจ (Business Rules)
+
+| กฎ | ค่า | บันทึกที่ |
+|---|---|---|
+| ค่าเช่า | **10% ของราคาปก** คำนวณ ณ วันจอง | `issues.amount` |
+| ระยะเวลาเช่า | **7 วัน** นับจากวันรับหนังสือ | `issues.due_date` |
+| ค่าปรับ | **10 บาท / วัน** ที่เกินกำหนด (ไม่เกินกำหนด = 0) | `issues.fine` |
+| การชำระเงิน | ชำระเงินสดที่เคาน์เตอร์เมื่อมารับหนังสือ | — |
+
+> **หมายเหตุการออกแบบ:** ระบบเก็บ `amount` ไว้กับรายการเช่าแต่ละรายการ แทนการคำนวณสดจากราคาปก
+> เพื่อให้ยอดในประวัติไม่เปลี่ยนตามราคาที่อาจถูกแก้ไขภายหลัง
+
+### วงจรสถานะรายการเช่า
 
 ```
-โปรเจกต์ LMS ของคุณ/  (lms_project/)
-├── AGENTS.md                      # คู่มือทีม (portable ทุกเครื่องมือ)
-├── CLAUDE.md                      # ให้ Claude Code อ่าน AGENTS.md อัตโนมัติ (@AGENTS.md)
-└── .claude/
-    └── agents/
-        ├── lms-orchestrator.md    # คำสั่งเดียวจบ: กำกับลำดับ subagent อื่น    (read-only +Task)
-        ├── lms-locator.md         # สำรวจโครงสร้าง หา file:line          (read-only)
-        ├── lms-reviewer.md        # ตรวจโค้ด → APPROVED/CHANGES_REQUESTED (read-only)
-        ├── lms-security.md        # ตรวจช่องโหว่ (defensive)             (read-only)
-        ├── lms-architecture.md    # คำแนะนำ DB/สถาปัตยกรรม               (read-only)
-        ├── lms-dev.md             # แก้บั๊ก/เพิ่มฟีเจอร์                  (เขียนได้: Edit/Write/Bash)
-        └── lms-tester.md          # เขียน+รันเทสต์                       (เขียนได้: Write/Bash — เฉพาะ test)
+                         admin อนุมัติ          สมาชิกคืน
+  [reserved] ──────────────► [active] ──────────────► [returned]
+   จองแล้ว    (+7 วัน)      กำลังเช่า   (คิดค่าปรับ)     คืนแล้ว
+      │
+      └──── admin ยกเลิก ───► [cancelled]  (คืนสต็อก)
 ```
 
-**สิทธิ์:** 5 ตัว audit/planner read-only. `lms-orchestrator` มี Task (สั่ง subagent อื่น) แต่แก้ไฟล์เองไม่ได้. `lms-dev` มี Edit/Write/Bash. `lms-tester` มี Write/Bash (ข้อจำกัด "แก้เฉพาะ test file" เป็นวินัยระดับ prompt).
+---
 
-**คำสั่ง Auto ตัวเดียวจบ (ผ่าน orchestrator):**
+## บทบาทผู้ใช้
+
+| บทบาท | สิทธิ์ |
+|---|---|
+| **บุคคลทั่วไป** (guest) | ค้นหาและดูรายละเอียดหนังสือ (ไม่ต้องเข้าสู่ระบบ) |
+| **สมาชิก** (user) | จอง / คืนหนังสือ ดูประวัติและค่าปรับของตนเอง |
+| **ผู้ดูแลระบบ** (admin) | จัดการหนังสือ สมาชิก การจอง และดูรายงานสรุปทั้งระบบ |
+
+---
+
+## เทคโนโลยีที่ใช้
+
+**Backend**
+- PHP (REST API, สถาปัตยกรรมแบบ action-based)
+- MySQL / MariaDB — เข้าถึงผ่าน **PDO Prepared Statements** (ป้องกัน SQL Injection)
+- **JWT (HS256)** สำหรับ authentication — สร้าง/ตรวจสอบด้วย `hash_hmac`
+- **bcrypt** สำหรับเข้ารหัสรหัสผ่าน (`password_hash` / `password_verify`)
+
+**Frontend**
+- HTML5 / CSS3 / JavaScript (ES6)
+- Bootstrap 5.1.3
+- Fetch API สำหรับเรียก REST API
+
+**สภาพแวดล้อมที่พัฒนาและทดสอบ**
+- macOS + XAMPP (Apache + PHP + MariaDB)
+- PHP 7.1 · MariaDB 10.4.28
+
+---
+
+## โครงสร้างโปรเจกต์
+
 ```
-ใช้ lms-orchestrator ทำครบวงจรบน lms-backend/api/issues.php: audit (security+architecture) → dev แก้ → tester เขียน+รันเทสต์ → reviewer สรุป verdict — dev/tester ให้ฉัน approve การเขียนเอง
+lms_project/
+├── lms-backend/
+│   ├── api/
+│   │   ├── auth.php            # สมัครสมาชิก / เข้าสู่ระบบ / ออก JWT
+│   │   ├── books.php           # จัดการข้อมูลหนังสือ + หนังสือยอดนิยม
+│   │   ├── issues.php          # จอง / คืน / อนุมัติ / ยกเลิก / รายงาน
+│   │   └── users.php           # จัดการสมาชิก (admin)
+│   ├── config/
+│   │   ├── config.php          # ตั้งค่ากลาง + BusinessException
+│   │   ├── jwt.php             # เข้ารหัส/ถอดรหัส JWT
+│   │   └── secret.php          # ค่าลับ — ไม่ขึ้น Git (.gitignore)
+│   ├── tests/
+│   │   └── FineCalcTest.php    # ทดสอบตรรกะคำนวณค่าปรับ
+│   └── database.sql            # สคริปต์สร้างฐานข้อมูล + ข้อมูลตัวอย่าง
+│
+└── lms-frontend/
+    ├── css/style.css
+    ├── img/covers/             # รูปหน้าปกหนังสือ
+    ├── js/
+    │   ├── api.js              # ตัวช่วยเรียก API, จัดรูปแบบข้อมูล, navbar
+    │   ├── auth.js             # เข้าสู่ระบบ / สมัครสมาชิก
+    │   ├── books.js            # ค้นหาและจองหนังสือ
+    │   └── dashboard.js        # หน้าหลักและหนังสือยอดนิยม
+    └── pages/
+        ├── login.html · register.html · dashboard.html
+        ├── search_book.html · my_history.html
+        └── admin/
+            ├── manage_books.html · manage_users.html
+            ├── manage_reservations.html
+            └── report.html     # แดชบอร์ดรายงานสรุป
 ```
 
-## ติดตั้ง (3 ขั้น)
+---
 
-1. **คัดลอกไฟล์ทั้งหมดลง root ของรีโป LMS** (ให้ `.claude/` อยู่ระดับเดียวกับโค้ด `api/`, `js/`).
-   - ถ้ามี `CLAUDE.md` เดิมอยู่แล้ว: อย่าทับ — แค่เพิ่มบรรทัด `@AGENTS.md` ลงไป แล้ววาง `AGENTS.md` + `.claude/agents/` เพิ่ม.
-2. เปิดโปรเจกต์ด้วย **Claude Code** ที่ root นั้น.
-3. ตรวจว่าติดตั้งแล้ว: พิมพ์คำสั่ง
+## โครงสร้างฐานข้อมูล
 
-   ```
-   /agents
-   ```
+**`users`** — ข้อมูลผู้ใช้และสิทธิ์
 
-   ต้องเห็น `lms-locator`, `lms-reviewer`, `lms-security`, `lms-architecture` ในรายการ.
+| ฟิลด์ | ชนิด | หมายเหตุ |
+|---|---|---|
+| id | INT AI PK | |
+| name | VARCHAR(100) | |
+| email | VARCHAR(100) UNIQUE | ใช้เข้าสู่ระบบ |
+| password | VARCHAR(255) | bcrypt hash |
+| role | ENUM('user','admin') | ค่าเริ่มต้น `user` |
+| created_at | TIMESTAMP | |
 
-## วิธีสั่งงาน
+**`books`** — ข้อมูลหนังสือ
 
-**อัตโนมัติ** (Claude Code เลือก subagent จากคำอธิบายให้เอง):
-```
-ตรวจความปลอดภัยของ api/auth.php ให้หน่อย
-review โค้ดที่เพิ่งแก้ใน api/issues.php
-หา endpoint ที่คิดค่าปรับอยู่ไฟล์ไหน บรรทัดไหน
+| ฟิลด์ | ชนิด | หมายเหตุ |
+|---|---|---|
+| id | INT AI PK | |
+| title / author / category | VARCHAR | |
+| cover_url | VARCHAR(500) NULL | path หรือ URL รูปหน้าปก |
+| price | DECIMAL(10,2) | ราคาปก — ใช้คำนวณค่าเช่า 10% |
+| copies | INT | จำนวนคงเหลือ |
+
+**`issues`** — รายการจอง / เช่า / คืน
+
+| ฟิลด์ | ชนิด | หมายเหตุ |
+|---|---|---|
+| id | INT AI PK | |
+| user_id / book_id | INT FK | อ้างอิง `users` / `books` |
+| issue_date / due_date / return_date | DATE | `due_date` = วันรับ + 7 วัน |
+| fine | DECIMAL(10,2) | ค่าปรับที่เกิดขึ้นจริง |
+| amount | DECIMAL(10,2) | ค่าเช่าที่เรียกเก็บจริง ณ วันทำรายการ |
+| description | VARCHAR(255) NULL | หมายเหตุของรายการ |
+| status | ENUM | `reserved` / `active` / `returned` / `cancelled` |
+
+---
+
+## API Endpoints
+
+เรียกผ่านรูปแบบ `?action=` — ทุก endpoint ยกเว้นการค้นหาสาธารณะต้องส่ง JWT ใน header `Authorization: Bearer <token>`
+
+### `books.php`
+
+| action | เมธอด | สิทธิ์ | หน้าที่ |
+|---|---|---|---|
+| `list` | GET | ทุกคน | รายการหนังสือ (รองรับคำค้น) |
+| `get` | GET | ทุกคน | รายละเอียดหนังสือรายเล่ม |
+| `popular` | GET | ทุกคน | หนังสือยอดนิยมจากสถิติการยืม |
+| `create` · `update` · `delete` | POST | admin | จัดการข้อมูลหนังสือ |
+
+### `issues.php`
+
+| action | เมธอด | สิทธิ์ | หน้าที่ |
+|---|---|---|---|
+| `reserve` | POST | สมาชิก | จองหนังสือ ตัดสต็อก คำนวณและบันทึกค่าเช่า |
+| `return` | POST | สมาชิก | คืนหนังสือ คำนวณค่าปรับ คืนสต็อก |
+| `my_current` | GET | สมาชิก | รายการที่ต้องคืน |
+| `history` | GET | สมาชิก | ประวัติการจองและเช่าของตนเอง |
+| `reservations` | GET | admin | รายการรออนุมัติรับหนังสือ |
+| `approve` | POST | admin | อนุมัติรับของ — เริ่มนับวันเช่า |
+| `cancel` | POST | admin | ยกเลิกการจองและคืนสต็อก |
+| `report` | GET | admin | ข้อมูลรายงานสรุปทั้งระบบ |
+
+---
+
+## การติดตั้งและใช้งาน
+
+### ความต้องการของระบบ
+XAMPP (Apache + PHP + MySQL/MariaDB) หรือ LAMP/MAMP ที่เทียบเท่า
+
+### ขั้นตอน
+
+**1. วางโปรเจกต์ใน document root**
+
+```bash
+cd /Applications/XAMPP/xamppfiles/htdocs
+git clone https://github.com/Studenttopiikesayhi/LMS.git lms_project
 ```
 
-**เจาะจง subagent:**
-```
-ใช้ lms-security ตรวจ api/issues.php เรื่อง IDOR กับ SQL injection
-ให้ lms-architecture ดู index ของตาราง issues
-ให้ lms-reviewer ตัดสิน diff ล่าสุด
+**2. สร้างฐานข้อมูล**
+
+```bash
+mysql -u root -p < lms_project/lms-backend/database.sql
 ```
 
-**Audit อย่างเดียว (ไม่แก้โค้ด):**
-```
-รัน audit บน lms-backend/api/issues.php: locator → security + architecture → reviewer
+สคริปต์จะสร้างฐานข้อมูล `lms_db` พร้อมตาราง 3 ตารางและข้อมูลตัวอย่าง
+
+**3. ตั้งค่าไฟล์ลับ**
+
+สร้าง `lms-backend/config/secret.php` (ไฟล์นี้ไม่ขึ้น Git โดยตั้งใจ):
+
+```php
+<?php
+return [
+    'DB_HOST'    => 'localhost',
+    'DB_NAME'    => 'lms_db',
+    'DB_USER'    => 'root',
+    'DB_PASS'    => '',                     // ตั้งรหัสผ่านก่อนใช้งานจริง
+    'JWT_SECRET' => 'ใส่ค่าสุ่มความยาว 64 ตัวอักษร',
+];
 ```
 
-**แก้บั๊ก/เพิ่มฟีเจอร์ (ให้ dev แก้จริง):**
-```
-แก้บั๊กการคิดค่าปรับใน lms-backend/api/issues.php ให้ค่าปรับ = วันเกิน × 10 (ไม่เกินกำหนด = 0)
+สร้างค่า `JWT_SECRET` ด้วยคำสั่ง:
+
+```bash
+php -r "echo bin2hex(random_bytes(32));"
 ```
 
-**ครบวงจร audit → fix → test → re-review (แนะนำ):**
+**4. เริ่มใช้งาน**
+
+เปิด Apache และ MySQL ใน XAMPP แล้วเข้า:
+
 ```
-แก้บั๊ก X แบบครบวงจร:
-1) lms-locator หา target file:line
-2) lms-security + lms-architecture ตรวจถ้าเกี่ยวกับ auth/DB
-3) lms-dev แก้แบบ minimal diff
-4) lms-tester เขียน+รันเทสต์ business logic
-5) lms-reviewer สรุป verdict — วนแก้จน APPROVED
+http://localhost/lms_project/lms-frontend/
 ```
 
-## ขอบเขต / ข้อจำกัดที่ต้องรู้ (ตรงไปตรงมา)
+### บัญชีตัวอย่าง
+
+| บทบาท | อีเมล | รหัสผ่าน |
+|---|---|---|
+| ผู้ดูแลระบบ | `admin@test.com` | `1234` |
+| สมาชิก | `test@test.com` | `1234` |
+
+> บัญชีเหล่านี้มีไว้สำหรับทดสอบในเครื่องเท่านั้น — เปลี่ยนรหัสผ่านก่อนนำไปใช้งานจริง
+
+---
+
+## ความปลอดภัยที่ระบบมี
+
+| มาตรการ | การนำไปใช้ |
+|---|---|
+| ป้องกัน SQL Injection | PDO Prepared Statements ทุกคำสั่ง |
+| เข้ารหัสรหัสผ่าน | bcrypt (`password_hash` / `password_verify`) |
+| ควบคุมสิทธิ์ | ตรวจ JWT + บทบาทฝั่งเซิร์ฟเวอร์ทุก endpoint ที่ต้องยืนยันตัวตน |
+| ป้องกัน XSS | escape ข้อความก่อนแสดงผล + ตรวจ URL รูปหน้าปก (ปฏิเสธ `javascript:` และ `data:`) |
+| ความถูกต้องของข้อมูล | ใช้ Transaction ในการจอง / คืน / ยกเลิก เพื่อกันสต็อกไม่ตรง |
+| ค่าลับ | `secret.php` ถูกยกเว้นใน `.gitignore` — ไม่มี credential ในรีโป |
+
+---
+
+## เอกสารประกอบโครงงาน
+
+| เอกสาร | เนื้อหา |
+|---|---|
+| Software Design Document (SD) | Use Case, Activity, Class, Sequence, ER Diagram, Data Dictionary, UI Design |
+| Software Requirement Specification (SRS) | Functional / Non-Functional Requirements |
+| Project Plan | แผนงาน ขอบเขต และไทม์ไลน์ |
+| ข้อเสนอโครงงาน | ที่มา วัตถุประสงค์ และประโยชน์ที่คาดว่าจะได้รับ |
+
+> เอกสารทั้งหมดจัดเก็บแยกจากรีโปนี้ตามข้อกำหนดของหลักสูตร
+
+---
+
+## ขอบเขตและข้อจำกัดที่ควรทราบ
 
 | ประเด็น | สถานะจริง |
-|--------|-----------|
-| บังคับ read-only (แก้ไฟล์ไม่ได้) | ✅ จริง — ผ่าน `tools:` allowlist ใน frontmatter |
-| Claude Code อ่าน `AGENTS.md` | ✅ ผ่าน `CLAUDE.md` ที่ `@AGENTS.md` (native อ่าน `CLAUDE.md`) |
-| บังคับลำดับ chain อัตโนมัติ | ⚠️ **ไม่** — Claude Code เลือก/สั่งได้ แต่ไม่ล็อกลำดับ ต้อง orchestrate ด้วยคำสั่ง |
-| `APPROVED/CHANGES_REQUESTED` | ⚠️ convention ระดับ prompt (subagent ทำตาม ไม่ใช่ engine บังคับ) |
-| ตัว subagent แก้โค้ดให้ | ❌ โดยตั้งใจ — ให้ main agent หรือบทบาท dev เป็นผู้แก้ตามรายงาน |
+|---|---|
+| การชำระเงิน | ชำระเงินสดที่เคาน์เตอร์ — ระบบบันทึกยอดที่ต้องเก็บ ไม่ได้เชื่อมต่อ payment gateway |
+| การอัปโหลดรูปหน้าปก | รับเป็น path หรือ URL — ยังไม่รองรับการอัปโหลดไฟล์ (ลดความเสี่ยงด้านความปลอดภัย) |
+| การแจ้งเตือน | ไม่มีระบบส่งอีเมล / SMS แจ้งเตือนกำหนดคืน |
+| สภาพแวดล้อม | ออกแบบสำหรับติดตั้งภายในร้าน (localhost / LAN) ยังไม่ได้ hardening สำหรับ public internet |
+| การทดสอบ | ทดสอบด้วยตนเองครอบคลุมทุกฟังก์ชันหลัก และมี unit test เฉพาะตรรกะคำนวณค่าปรับ |
 
-## หมายเหตุความปลอดภัยของข้อมูล
-- subagent เหล่านี้ **อ่านอย่างเดียว** จึงไม่มีความเสี่ยงลบ/เขียนทับโค้ด.
-- `lms-security` เป็น **defensive-only** — หา mitigation/secure fix ไม่ผลิต exploit.
-- ไม่มีการฝัง credential ใด ๆ ในไฟล์ชุดนี้.
-- เอกสารอ้างอิงกลไก Claude Code (`.claude/agents/`, frontmatter `tools:`) อาจเปลี่ยนตามเวอร์ชัน — ควรเช็ก docs ทางการของ Claude Code อีกครั้งถ้าพฤติกรรมต่างจากนี้.
+---
+
+## เอกสารอื่นในรีโป
+
+- [`AGENTS.md`](AGENTS.md) — คู่มือชุด subagent สำหรับตรวจสอบและพัฒนาโค้ดด้วย Claude Code
+  (เป็นเครื่องมือช่วยพัฒนา ไม่ใช่ส่วนหนึ่งของระบบที่ส่งมอบ)
+
+---
+
+## License
+
+โครงงานเพื่อการศึกษา — สงวนสิทธิ์การนำไปใช้เชิงพาณิชย์
