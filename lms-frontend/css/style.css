@@ -3,3 +3,69 @@ body { background-color: #f8f9fa; }
 .action-card { transition: transform .15s ease; cursor: pointer; }
 .action-card:hover { transform: translateY(-4px); }
 .table-responsive { border-radius: .5rem; overflow: hidden; }
+
+/* ---------- กรอบรูปหน้าปกหนังสือ ----------
+   📖 เป็น placeholder อยู่ด้านหลัง ส่วน <img> วางทับ
+   ถ้ารูปโหลดไม่ขึ้น onerror จะลบ <img> ทิ้ง จึงเห็น 📖 แทนอัตโนมัติ */
+.cover-box {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e9ecef;
+    border: 1px solid #dee2e6;
+    border-radius: .25rem;
+    overflow: hidden;
+    font-size: 1.1rem;
+    color: #adb5bd;
+    flex: 0 0 auto;
+}
+.cover-box img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ตัวอย่างรูปในฟอร์มจัดการหนังสือ */
+#coverPreview {
+    max-height: 160px;
+    border-radius: .25rem;
+    border: 1px solid #dee2e6;
+}
+
+/* ---------- Dashboard: การ์ดตัวชี้วัด (KPI) ---------- */
+.kpi-card { border-left-width: 4px !important; }
+.kpi-label { font-size: .85rem; color: #6c757d; }
+.kpi-value { font-size: 1.6rem; font-weight: 600; line-height: 1.3; }
+.kpi-value small { font-size: .8rem; font-weight: 400; color: #6c757d; }
+.kpi-sub { font-size: .78rem; color: #868e96; margin-top: .15rem; }
+
+/* ---------- Dashboard: กราฟโดนัท (วาดด้วย conic-gradient ไม่พึ่งไลบรารีภายนอก) ---------- */
+.donut {
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: #e9ecef;
+}
+.donut-hole {
+    width: 96px; height: 96px;
+    background: #fff;
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    line-height: 1.1;
+}
+.donut-hole span { font-size: 1.5rem; font-weight: 600; }
+.donut-hole small { font-size: .72rem; color: #6c757d; }
+
+/* จุดสีในคำอธิบายกราฟ */
+.legend-dot {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    margin-right: .5rem;
+    vertical-align: middle;
+}

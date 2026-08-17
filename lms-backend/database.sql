@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS books (
                                      title VARCHAR(200) NOT NULL,
     author VARCHAR(100),
     category VARCHAR(100),
+    cover_url VARCHAR(500) NULL COMMENT 'URL หรือ path รูปหน้าปกหนังสือ',
     price DECIMAL(10,2) DEFAULT 0,
     copies INT DEFAULT 1
     ) ENGINE=InnoDB;
@@ -27,6 +28,8 @@ CREATE TABLE IF NOT EXISTS issues (
                                       due_date DATE,
                                       return_date DATE NULL,
                                       fine DECIMAL(10,2) DEFAULT 0,
+    amount DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT 'ค่าเช่าที่เรียกเก็บจริง ณ วันทำรายการ',
+    description VARCHAR(255) NULL COMMENT 'หมายเหตุรายการ',
     status ENUM('reserved','active','returned','cancelled') DEFAULT 'reserved',
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (book_id) REFERENCES books(id)
@@ -37,9 +40,11 @@ INSERT INTO users (name, email, password, role) VALUES
     ('Admin Staff', 'admin@test.com', '$2y$10$4SYe0IwreEGGOLHmhg1OKuduMDViSLU8LFOtn57WT2wBno85TfETq', 'admin');
 
 -- ข้อมูลหนังสือตัวอย่างไว้ทดสอบ
-INSERT INTO books (title, author, category, price, copies) VALUES
-                                                               ('แฮร์รี่ พอตเตอร์ เล่ม 1', 'J.K. Rowling', 'แฟนตาซี', 350.00, 3),
-                                                               ('เพชรพระอุมา', 'พนมเทียน', 'ผจญภัย', 280.00, 2),
-                                                               ('โต๊ะโตะจัง', 'คุโรยานางิ เท็ตสึโกะ', 'วรรณกรรม', 220.00, 5),
-                                                               ('Clean Code', 'Robert C. Martin', 'เทคโนโลยี', 590.00, 1),
-                                                               ('สามก๊ก', 'หลัว กวั้นจง', 'ประวัติศาสตร์', 450.00, 0);
+-- cover_url: วางไฟล์รูปไว้ที่ lms-frontend/img/covers/ แล้วอ้างเป็น path สัมพัทธ์
+--            (ไม่พึ่งเว็บภายนอก -> ลิงก์ไม่ตาย และไม่ติดลิขสิทธิ์รูปของเว็บอื่น)
+INSERT INTO books (title, author, category, cover_url, price, copies) VALUES
+                                                               ('แฮร์รี่ พอตเตอร์ เล่ม 1', 'J.K. Rowling', 'แฟนตาซี', 'img/covers/harry-potter-1.jpg', 350.00, 3),
+                                                               ('เพชรพระอุมา', 'พนมเทียน', 'ผจญภัย', 'img/covers/petchprauma.jpg', 280.00, 2),
+                                                               ('โต๊ะโตะจัง', 'คุโรยานางิ เท็ตสึโกะ', 'วรรณกรรม', 'img/covers/totto-chan.jpg', 220.00, 5),
+                                                               ('Clean Code', 'Robert C. Martin', 'เทคโนโลยี', 'img/covers/clean-code.jpg', 590.00, 1),
+                                                               ('สามก๊ก', 'หลัว กวั้นจง', 'ประวัติศาสตร์', 'img/covers/samkok.jpg', 450.00, 0);

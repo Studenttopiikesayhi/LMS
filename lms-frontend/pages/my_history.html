@@ -19,8 +19,8 @@
     <div class="card shadow-sm">
         <div class="card-header bg-info text-white"><h5 class="mb-0">📜 ประวัติการจองและเช่าหนังสือ</h5></div>
         <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0">
-                <thead class="table-dark"><tr><th>หนังสือ</th><th>วันที่ทำรายการ</th><th>กำหนดส่ง</th><th>วันที่คืน</th><th>ค่าเช่า</th><th>ค่าปรับ</th><th>สถานะ</th></tr></thead>
+            <table class="table table-hover table-striped align-middle mb-0">
+                <thead class="table-dark"><tr><th style="width:70px">ปก</th><th>หนังสือ</th><th>วันที่ทำรายการ</th><th>กำหนดส่ง</th><th>วันที่คืน</th><th>ค่าเช่า</th><th>ค่าปรับ</th><th>หมายเหตุ</th><th>สถานะ</th></tr></thead>
                 <tbody id="histRows"></tbody>
             </table>
         </div>
@@ -42,8 +42,13 @@
         const today = new Date().toISOString().slice(0, 10);
         box.innerHTML = '<ul class="list-group">' + data.data.map(i => {
             const late = i.due_date < today ? ' <span class="badge bg-danger">เกินกำหนด</span>' : '';
+            const note = i.description ? `<div class="small text-muted">หมายเหตุ: ${escapeHtml(i.description)}</div>` : '';
             return `<li class="list-group-item d-flex justify-content-between align-items-center">
-        <span>${escapeHtml(i.title)} <small class="text-muted">(กำหนดส่ง ${fmtDate(i.due_date)})</small>${late}</span>
+        <span class="d-flex align-items-center gap-2">
+          ${coverImg(i.cover_url, i.title, 48)}
+          <span>${escapeHtml(i.title)} <small class="text-muted">(กำหนดส่ง ${fmtDate(i.due_date)})</small>${late}
+            <div class="small text-muted">ค่าเช่าที่เรียกเก็บ ${fmtMoney(i.amount)} บ.</div>${note}</span>
+        </span>
         <button class="btn btn-sm btn-warning" onclick="doReturn(${i.id})">คืนหนังสือ</button></li>`;
         }).join('') + '</ul><div class="form-text mt-2">*หากคืนเกินกำหนด มีค่าปรับวันละ 10 บาท</div>';
     }
@@ -56,13 +61,18 @@
     async function loadHistory() {
         const tbody = document.getElementById('histRows');
         const { data } = await apiFetch('/issues.php?action=history');
-        if (!data.success || !data.data.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">ยังไม่มีประวัติ</td></tr>'; return; }
+        if (!data.success || !data.data.length) { tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">ยังไม่มีประวัติ</td></tr>'; return; }
         tbody.innerHTML = data.data.map(r => {
-            const fee = (Number(r.price) * 0.10).toFixed(2);
+            /* ใช้ค่าเช่าที่บันทึกไว้จริงในฟิลด์ amount (ไม่คำนวณจากราคาปกปัจจุบัน)
+               -> ถ้าราคาปกถูกแก้ภายหลัง ยอดในประวัติจะไม่เปลี่ยนตาม
+               fallback ไปคำนวณจากราคาปก เฉพาะรายการเก่าที่ยังไม่มี amount */
+            const fee = (Number(r.amount) > 0) ? Number(r.amount) : Number(r.price) * 0.10;
             return `<tr>
+      <td>${coverImg(r.cover_url, r.title)}</td>
       <td>${escapeHtml(r.title)}</td><td>${fmtDate(r.issue_date)}</td><td>${fmtDate(r.due_date)}</td>
-      <td>${r.return_date ? fmtDate(r.return_date) : '-'}</td><td>${fee} บ.</td>
-      <td class="text-danger fw-bold">${Number(r.fine) > 0 ? Number(r.fine).toFixed(2) + ' บ.' : '-'}</td>
+      <td>${r.return_date ? fmtDate(r.return_date) : '-'}</td><td>${fmtMoney(fee)} บ.</td>
+      <td class="text-danger fw-bold">${Number(r.fine) > 0 ? fmtMoney(r.fine) + ' บ.' : '-'}</td>
+      <td><small>${r.description ? escapeHtml(r.description) : '-'}</small></td>
       <td>${statusBadge(r)}</td></tr>`;
         }).join('');
     }

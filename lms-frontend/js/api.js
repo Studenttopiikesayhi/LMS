@@ -1,5 +1,11 @@
 /* api.js — ตั้งค่ากลาง + ฟังก์ชันช่วยทุกหน้า */
-const API_BASE = 'http://localhost/lms_project/lms-backend/api';
+
+/* API_BASE อ้างอิงโฮสต์ที่กำลังเปิดหน้าเว็บอยู่จริง
+   -> เปิดจากเครื่องอื่นในวง LAN (เช่น http://192.168.1.20/...) ก็ยังเรียก API ได้
+   -> ถ้าเปิดไฟล์ตรง ๆ ด้วย file:// จะย้อนกลับไปใช้ localhost */
+const API_BASE = (location.protocol === 'http:' || location.protocol === 'https:')
+    ? location.origin + '/lms_project/lms-backend/api'
+    : 'http://localhost/lms_project/lms-backend/api';
 
 /* ---------- จัดการ token / user (เก็บใน localStorage) ---------- */
 function setToken(t) { localStorage.setItem('lms_token', t); }
@@ -76,10 +82,33 @@ function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 function fmtDate(d) { if (!d) return '-'; const p = String(d).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d; }
+function fmtMoney(v) { return Number(v ?? 0).toFixed(2); }
 function statusBadge(r) {
     const today = new Date().toISOString().slice(0, 10);
     if (r.status === 'returned') return '<span class="badge bg-success">คืนแล้ว</span>';
     if (r.status === 'active') return r.due_date < today ? '<span class="badge bg-danger">เกินกำหนด</span>' : '<span class="badge bg-primary">กำลังเช่า</span>';
     if (r.status === 'reserved') return '<span class="badge bg-warning text-dark">รอรับของ</span>';
     return '<span class="badge bg-secondary">ยกเลิก</span>';
+}
+
+/* ---------- รูปหน้าปกหนังสือ ----------
+   - ยอมรับเฉพาะ http(s):// หรือ path สัมพัทธ์ (กัน javascript:/data: ที่เป็นช่องโหว่ XSS)
+   - ถ้าไม่มีรูป หรือรูปโหลดไม่ขึ้น จะแสดงกรอบ 📖 แทน (onerror ลบ <img> ทิ้ง เหลือ placeholder) */
+function isSafeCoverUrl(u) {
+    const s = String(u ?? '').trim();
+    if (!s) return false;
+    if (/^https?:\/\//i.test(s)) return true;
+    return /^[A-Za-z0-9_\-./]+$/.test(s) && !s.includes('..');
+}
+/* path สัมพัทธ์จากหน้าเว็บกลับไปที่รากของ lms-frontend/
+   - pages/xxx.html        -> ../
+   - pages/admin/xxx.html  -> ../../   */
+function assetPrefix() { return location.pathname.includes('/admin/') ? '../../' : '../'; }
+
+function coverImg(url, title = '', h = 56) {
+    const box = `<span class="cover-box" style="height:${h}px;width:${Math.round(h * 0.7)}px">`;
+    if (!isSafeCoverUrl(url)) return box + '📖</span>';
+    const raw = String(url).trim();
+    const src = /^https?:\/\//i.test(raw) ? raw : assetPrefix() + raw;
+    return box + `📖<img src="${escapeHtml(src)}" alt="${escapeHtml(title)}" loading="lazy" onerror="this.remove()"></span>`;
 }

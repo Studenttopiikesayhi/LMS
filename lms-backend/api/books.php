@@ -14,7 +14,24 @@ switch ($_GET['action'] ?? '') {
     default: json_response(['success'=>false,'message'=>'ไม่พบ action ที่ร้องขอ'],404);
 }
 
-// รายการ + ค้นหา (สาธารณะ — guest ค้นได้)
+/**
+ * ตรวจและทำความสะอาด URL รูปหน้าปก
+ * อนุญาตเฉพาะ http(s):// หรือ path สัมพัทธ์ในโปรเจกต์เท่านั้น
+ * เพื่อกัน javascript:/data: ที่อาจกลายเป็นช่องโหว่ XSS เมื่อนำไปใส่ใน <img src>
+ * คืนค่า null เมื่อผู้ใช้เว้นว่าง (เก็บเป็น NULL ในฐานข้อมูล)
+ */
+function clean_cover_url(string $url): ?string {
+    $url = trim($url);
+    if ($url === '') return null;
+    if (mb_strlen($url) > 500)
+        json_response(['success'=>false,'message'=>'URL รูปหน้าปกต้องยาวไม่เกิน 500 ตัวอักษร'],400);
+    if (preg_match('#^https?://#i', $url)) return $url;                       // URL ภายนอก
+    if (preg_match('#^[A-Za-z0-9_\-./]+$#', $url) && strpos($url, '..') === false)
+        return $url;                                                          // path ในโปรเจกต์ เช่น img/covers/a.jpg
+    json_response(['success'=>false,'message'=>'URL รูปหน้าปกต้องขึ้นต้นด้วย http:// หรือ https:// หรือเป็น path ในโปรเจกต์ (เช่น img/covers/a.jpg)'],400);
+}
+
+// รายการ + ค้นหา (สาธารณะ — guest ค้นได้)  [SELECT * จึงได้ cover_url มาด้วยอัตโนมัติ]
 function books_list(): void {
     $q = trim($_GET['q'] ?? '');
     if ($q !== '') {
@@ -39,7 +56,7 @@ function books_get(): void {
 // หนังสือยอดนิยม — นับจากจำนวนครั้งที่ถูกยืม (ตามขอบเขตข้อ 7.2)
 function books_popular(): void {
     $stmt = db()->query(
-        "SELECT b.id, b.title, b.author, b.category, b.price, b.copies, COUNT(i.id) AS borrow_count
+        "SELECT b.id, b.title, b.author, b.category, b.cover_url, b.price, b.copies, COUNT(i.id) AS borrow_count
          FROM books b LEFT JOIN issues i ON i.book_id = b.id
          GROUP BY b.id ORDER BY borrow_count DESC, b.title ASC LIMIT 5"
     );
@@ -52,8 +69,9 @@ function books_create(): void {
     $b = get_json_body();
     $title = trim($b['title'] ?? '');
     if ($title === '') json_response(['success'=>false,'message'=>'กรุณากรอกชื่อหนังสือ'],400);
-    db()->prepare("INSERT INTO books (title, author, category, price, copies) VALUES (?,?,?,?,?)")
-        ->execute([$title, trim($b['author'] ?? ''), trim($b['category'] ?? ''), (float)($b['price'] ?? 0), (int)($b['copies'] ?? 0)]);
+    $cover = clean_cover_url((string)($b['cover_url'] ?? ''));
+    db()->prepare("INSERT INTO books (title, author, category, cover_url, price, copies) VALUES (?,?,?,?,?,?)")
+        ->execute([$title, trim($b['author'] ?? ''), trim($b['category'] ?? ''), $cover, (float)($b['price'] ?? 0), (int)($b['copies'] ?? 0)]);
     json_response(['success'=>true,'message'=>'เพิ่มหนังสือสำเร็จ','id'=>(int)db()->lastInsertId()],201);
 }
 
@@ -63,8 +81,9 @@ function books_update(): void {
     $b = get_json_body();
     $id = (int)($b['id'] ?? 0);
     if ($id <= 0) json_response(['success'=>false,'message'=>'ไม่พบรหัสหนังสือ'],400);
-    db()->prepare("UPDATE books SET title=?, author=?, category=?, price=?, copies=? WHERE id=?")
-        ->execute([trim($b['title'] ?? ''), trim($b['author'] ?? ''), trim($b['category'] ?? ''), (float)($b['price'] ?? 0), (int)($b['copies'] ?? 0), $id]);
+    $cover = clean_cover_url((string)($b['cover_url'] ?? ''));
+    db()->prepare("UPDATE books SET title=?, author=?, category=?, cover_url=?, price=?, copies=? WHERE id=?")
+        ->execute([trim($b['title'] ?? ''), trim($b['author'] ?? ''), trim($b['category'] ?? ''), $cover, (float)($b['price'] ?? 0), (int)($b['copies'] ?? 0), $id]);
     json_response(['success'=>true,'message'=>'แก้ไขข้อมูลสำเร็จ']);
 }
 

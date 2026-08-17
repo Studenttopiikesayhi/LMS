@@ -16,8 +16,8 @@
     </div>
     <div class="card shadow-sm">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead class="table-dark"><tr><th>ID</th><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>หมวดหมู่</th><th>ราคา</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead>
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark"><tr><th>ID</th><th style="width:70px">ปก</th><th>ชื่อหนังสือ</th><th>ผู้แต่ง</th><th>หมวดหมู่</th><th>ราคา</th><th>คงเหลือ</th><th>จัดการ</th></tr></thead>
                 <tbody id="rows"></tbody>
             </table>
         </div>
@@ -26,15 +26,34 @@
 </div>
 
 <div class="modal fade" id="bookModal" tabindex="-1">
-    <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="modalTitle">เพิ่มหนังสือ</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-            <div class="mb-3"><label>ชื่อหนังสือ</label><input id="f_title" class="form-control"></div>
-            <div class="mb-3"><label>ผู้เขียน</label><input id="f_author" class="form-control"></div>
-            <div class="mb-3"><label>หมวดหมู่</label><input id="f_category" class="form-control"></div>
             <div class="row">
-                <div class="col-6 mb-3"><label>ราคา</label><input id="f_price" type="number" step="0.01" class="form-control"></div>
-                <div class="col-6 mb-3"><label>จำนวนคงเหลือ</label><input id="f_copies" type="number" class="form-control"></div>
+                <div class="col-md-8">
+                    <div class="mb-3"><label>ชื่อหนังสือ</label><input id="f_title" class="form-control"></div>
+                    <div class="mb-3"><label>ผู้เขียน</label><input id="f_author" class="form-control"></div>
+                    <div class="mb-3"><label>หมวดหมู่</label><input id="f_category" class="form-control"></div>
+                    <div class="mb-3">
+                        <label>URL รูปหน้าปก <small class="text-muted">(ไม่บังคับ)</small></label>
+                        <input id="f_cover_url" class="form-control" maxlength="500"
+                               placeholder="img/covers/clean-code.jpg หรือ https://example.com/cover.jpg"
+                               oninput="updatePreview()">
+                        <div class="form-text">
+                            ใส่ได้ทั้ง path ในโปรเจกต์ (แนะนำ: วางไฟล์ที่ <code>lms-frontend/img/covers/</code>)
+                            หรือ URL ที่ขึ้นต้นด้วย http:// หรือ https://
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3"><label>ราคา</label><input id="f_price" type="number" step="0.01" class="form-control"></div>
+                        <div class="col-6 mb-3"><label>จำนวนคงเหลือ</label><input id="f_copies" type="number" class="form-control"></div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <label class="form-label d-block">ตัวอย่างรูปหน้าปก</label>
+                    <img id="coverPreview" class="img-fluid d-none" alt="ตัวอย่างหน้าปก">
+                    <div id="coverNone" class="text-muted border rounded py-5">📖<br><small>ยังไม่มีรูป</small></div>
+                </div>
             </div>
         </div>
         <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button><button class="btn btn-primary" onclick="save()">บันทึก</button></div>
@@ -50,19 +69,36 @@
         cache = data.data || [];
         const tbody = document.getElementById('rows');
         tbody.innerHTML = cache.length ? cache.map(b => `<tr>
-    <td>${b.id}</td><td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.author || '-')}</td>
-    <td>${escapeHtml(b.category || '-')}</td><td>${Number(b.price).toFixed(2)}</td><td>${b.copies}</td>
+    <td>${b.id}</td><td>${coverImg(b.cover_url, b.title)}</td>
+    <td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.author || '-')}</td>
+    <td>${escapeHtml(b.category || '-')}</td><td>${fmtMoney(b.price)}</td><td>${b.copies}</td>
     <td><button class="btn btn-sm btn-warning" onclick="openEdit(${b.id})">แก้ไข</button>
         <button class="btn btn-sm btn-danger" onclick="del(${b.id})">ลบ</button></td></tr>`).join('')
-            : '<tr><td colspan="7" class="text-center py-3">ไม่มีข้อมูล</td></tr>';
+            : '<tr><td colspan="8" class="text-center py-3">ไม่มีข้อมูล</td></tr>';
     }
     function modal() { return bootstrap.Modal.getOrCreateInstance(document.getElementById('bookModal')); }
-    function setForm(b) { ['title','author','category','price','copies'].forEach(k => document.getElementById('f_' + k).value = b[k] ?? ''); }
+    function setForm(b) { ['title','author','category','cover_url','price','copies'].forEach(k => document.getElementById('f_' + k).value = b[k] ?? ''); updatePreview(); }
     function openAdd() { editingId = null; setForm({}); document.getElementById('modalTitle').textContent = 'เพิ่มหนังสือ'; modal().show(); }
     function openEdit(id) { const b = cache.find(x => x.id == id); if (!b) return; editingId = b.id; setForm(b); document.getElementById('modalTitle').textContent = 'แก้ไขหนังสือ'; modal().show(); }
     function f(id) { return document.getElementById('f_' + id).value.trim(); }
+
+    /* แสดงตัวอย่างรูปแบบสด ๆ — ถ้า URL ไม่ปลอดภัยหรือโหลดไม่ขึ้นจะกลับไปแสดงกล่อง 📖 */
+    function updatePreview() {
+        const url = f('cover_url');
+        const img = document.getElementById('coverPreview');
+        const none = document.getElementById('coverNone');
+        if (!isSafeCoverUrl(url)) { img.classList.add('d-none'); none.classList.remove('d-none'); return; }
+        img.src = /^https?:\/\//i.test(url) ? url : assetPrefix() + url;
+        img.onload  = () => { img.classList.remove('d-none'); none.classList.add('d-none'); };
+        img.onerror = () => { img.classList.add('d-none'); none.classList.remove('d-none'); };
+    }
+
     async function save() {
-        const body = { title: f('title'), author: f('author'), category: f('category'), price: parseFloat(f('price')) || 0, copies: parseInt(f('copies')) || 0 };
+        const body = {
+            title: f('title'), author: f('author'), category: f('category'),
+            cover_url: f('cover_url'),
+            price: parseFloat(f('price')) || 0, copies: parseInt(f('copies')) || 0
+        };
         if (!body.title) { showAlert('กรุณากรอกชื่อหนังสือ', 'warning'); return; }
         let res;
         if (editingId) { body.id = editingId; res = await apiFetch('/books.php?action=update', { method: 'POST', body }); }
